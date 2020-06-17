@@ -1,0 +1,571 @@
+{
+
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+
+    "nsgName": {
+
+      "type": "string",
+      "defaultValue": "[concat('nsg', uniquestring(resourceGroup().id))]",
+      "metadata": {
+            "description": "Name of the NSG to create"
+        }
+    },
+    "location": {
+        "type": "string",
+        "defaultValue": "[resourceGroup().location]",
+        "metadata": {
+            "description": "Region where you resources are located"
+        }
+    },
+    "storageAccountType": {
+        "type": "string",
+        "defaultValue": "Standard_LRS",
+        "allowedValues": [
+            "Standard_LRS",
+            "Standard_GRS",
+            "Standard_ZRS"
+        ],
+        "metadata": {
+            "description": "Storage Account type"
+        }
+    },
+    "NetworkWatcherName": {
+        "type": "string",
+        "defaultValue": "[concat('NetworkWatcher_', parameters('location'))]",
+        "metadata": {
+            "description": "Name of the Network Watcher attached to your subscription. Format: NetworkWatcher_<region_name>"
+        }
+    },
+    "FlowLogName": {
+        "type": "string",
+        "defaultValue": "[concat('FlowLog', uniquestring(resourceGroup().id))]",
+        "metadata": {
+            "description": "Chosen name of your Flow log resource"
+        }
+    },
+    "RetentionDays": {
+        "type": "int",
+        "defaultValue": 5,
+        "minValue": 0,
+        "maxValue": 365,
+        "metadata": {
+            "description": "Retention period in days. Default is zero which stands for permanent retention. Can be any Integer from 0 to 365"
+        }
+    },
+    "FlowLogsversion": {
+        "type": "string",
+        "defaultValue": "2",
+        "allowedValues": [
+            "1",
+            "2"
+        ],
+        "metadata": {
+            "description": "FlowLogs Version. Correct values are 1 or 2 (default)"
+        }
+    }
+
+  },
+
+  "variables": {
+
+    "VNETPrefix": "10.0.0.0/16",
+
+    "VNETSubnet1Name": "SubnetA",
+
+    "VNETSubnet1Prefix": "10.0.0.0/24",
+
+    "VNETSubnet2Name": "SubnetB",
+
+    "nsgname": "[parameters('nsgName')]",
+
+    "storageAccountName": "[concat('flowlogs', uniquestring(resourceGroup().id))]",
+
+    "VNETSubnet2Prefix": "10.0.1.0/24"},
+
+  "resources": [
+
+    {
+
+      "name": "VNET",
+
+      "type": "Microsoft.Network/virtualNetworks",
+
+      "location": "[resourceGroup().location]",
+
+      "apiVersion": "2016-03-30",
+
+      "dependsOn": [
+
+        "[resourceId('Microsoft.Network/networkSecurityGroups',parameters('nsgName'))]"
+
+      ],
+
+      "tags": {
+
+        "displayName": "VNET"
+
+      },
+
+      "properties": {
+
+        "addressSpace": {
+
+          "addressPrefixes": [
+
+            "[variables('VNETPrefix')]"
+
+          ]
+
+        },
+
+        "subnets": [
+
+          {
+
+            "name": "[variables('VNETSubnet1Name')]",
+
+            "properties": {
+
+              "addressPrefix": "[variables('VNETSubnet1Prefix')]",
+
+              "networkSecurityGroup": {
+
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('nsgName'))]"
+
+              }
+
+            }
+
+          },
+
+          {
+
+            "name": "[variables('VNETSubnet2Name')]",
+
+            "properties": {
+
+              "addressPrefix": "[variables('VNETSubnet2Prefix')]"
+
+            }
+
+          }
+
+        ]
+
+      }
+
+    },
+
+    {
+
+      "type": "Microsoft.Network/networkSecurityGroups",
+
+      "name": "[parameters('nsgName')]",
+
+      "apiVersion": "2018-02-01",
+
+      "location": "[resourceGroup().location]",
+
+      "dependsOn": [],
+
+      "properties": {
+
+        "securityRules": [
+
+          {
+
+            "name": "inbound-tcp-80-http",
+
+            "etag": "W/\"0e74bdd1-2fa9-46e6-98f6-d7e82c81cba2\"",
+
+            "properties": {
+
+              "protocol": "Tcp",
+
+              "sourcePortRange": "*",
+
+              "destinationPortRange": "80",
+
+              "sourceAddressPrefix": "*",
+
+              "destinationAddressPrefix": "VirtualNetwork",
+
+              "access": "Allow",
+
+              "priority": 100,
+
+              "direction": "Inbound",
+
+              "sourcePortRanges": [],
+
+              "destinationPortRanges": [],
+
+              "sourceAddressPrefixes": [],
+
+              "destinationAddressPrefixes": []
+
+            }
+
+          }
+
+        ],
+
+        "defaultSecurityRules": [
+
+          {
+
+            "name": "AllowVnetInBound",
+
+            "etag": "W/\"0e74bdd1-2fa9-46e6-98f6-d7e82c81cba2\"",
+
+            "properties": {
+
+              "description": "Allow inbound traffic from all VMs in VNET",
+
+              "protocol": "*",
+
+              "sourcePortRange": "*",
+
+              "destinationPortRange": "*",
+
+              "sourceAddressPrefix": "VirtualNetwork",
+
+              "destinationAddressPrefix": "VirtualNetwork",
+
+              "access": "Allow",
+
+              "priority": 65000,
+
+              "direction": "Inbound",
+
+              "sourcePortRanges": [],
+
+              "destinationPortRanges": [],
+
+              "sourceAddressPrefixes": [],
+
+              "destinationAddressPrefixes": []
+
+            }
+
+          },
+
+          {
+
+            "name": "AllowAzureLoadBalancerInBound",
+
+            "etag": "W/\"0e74bdd1-2fa9-46e6-98f6-d7e82c81cba2\"",
+
+            "properties": {
+
+              "description": "Allow inbound traffic from azure load balancer",
+
+              "protocol": "*",
+
+              "sourcePortRange": "*",
+
+              "destinationPortRange": "*",
+
+              "sourceAddressPrefix": "AzureLoadBalancer",
+
+              "destinationAddressPrefix": "*",
+
+              "access": "Allow",
+
+              "priority": 65001,
+
+              "direction": "Inbound",
+
+              "sourcePortRanges": [],
+
+              "destinationPortRanges": [],
+
+              "sourceAddressPrefixes": [],
+
+              "destinationAddressPrefixes": []
+
+            }
+
+          },
+
+          {
+
+            "name": "DenyAllInBound",
+
+            "etag": "W/\"0e74bdd1-2fa9-46e6-98f6-d7e82c81cba2\"",
+
+            "properties": {
+
+              "description": "Deny all inbound traffic",
+
+              "protocol": "*",
+
+              "sourcePortRange": "*",
+
+              "destinationPortRange": "*",
+
+              "sourceAddressPrefix": "*",
+
+              "destinationAddressPrefix": "*",
+
+              "access": "Deny",
+
+              "priority": 65500,
+
+              "direction": "Inbound",
+
+              "sourcePortRanges": [],
+
+              "destinationPortRanges": [],
+
+              "sourceAddressPrefixes": [],
+
+              "destinationAddressPrefixes": []
+
+            }
+
+          },
+
+          {
+
+            "name": "AllowVnetOutBound",
+
+            "etag": "W/\"0e74bdd1-2fa9-46e6-98f6-d7e82c81cba2\"",
+
+            "properties": {
+
+              "description": "Allow outbound traffic from all VMs to all VMs in VNET",
+
+              "protocol": "*",
+
+              "sourcePortRange": "*",
+
+              "destinationPortRange": "*",
+
+              "sourceAddressPrefix": "VirtualNetwork",
+
+              "destinationAddressPrefix": "VirtualNetwork",
+
+              "access": "Allow",
+
+              "priority": 65000,
+
+              "direction": "Outbound",
+
+              "sourcePortRanges": [],
+
+              "destinationPortRanges": [],
+
+              "sourceAddressPrefixes": [],
+
+              "destinationAddressPrefixes": []
+
+            }
+
+          },
+
+          {
+
+            "name": "AllowInternetOutBound",
+
+            "etag": "W/\"0e74bdd1-2fa9-46e6-98f6-d7e82c81cba2\"",
+
+            "properties": {
+
+              "description": "Allow outbound traffic from all VMs to Internet",
+
+              "protocol": "*",
+
+              "sourcePortRange": "*",
+
+              "destinationPortRange": "*",
+
+              "sourceAddressPrefix": "*",
+
+              "destinationAddressPrefix": "Internet",
+
+              "access": "Allow",
+
+              "priority": 65001,
+
+              "direction": "Outbound",
+
+              "sourcePortRanges": [],
+
+              "destinationPortRanges": [],
+
+              "sourceAddressPrefixes": [],
+
+              "destinationAddressPrefixes": []
+
+            }
+
+          },
+
+          {
+
+            "name": "DenyAllOutBound",
+
+            "etag": "W/\"0e74bdd1-2fa9-46e6-98f6-d7e82c81cba2\"",
+
+            "properties": {
+
+              "description": "Deny all outbound traffic",
+
+              "protocol": "*",
+
+              "sourcePortRange": "*",
+
+              "destinationPortRange": "*",
+
+              "sourceAddressPrefix": "*",
+
+              "destinationAddressPrefix": "*",
+
+              "access": "Deny",
+
+              "priority": 65500,
+
+              "direction": "Outbound",
+
+              "sourcePortRanges": [],
+
+              "destinationPortRanges": [],
+
+              "sourceAddressPrefixes": [],
+
+              "destinationAddressPrefixes": []
+
+            }
+
+          }
+
+        ]
+
+      }
+
+    },
+    {
+        "type": "Microsoft.Storage/storageAccounts",
+        "apiVersion": "2019-04-01",
+        "name": "[variables('storageAccountName')]",
+        "location": "[parameters('location')]",
+        "sku": {
+            "name": "[parameters('storageAccountType')]"
+        },
+        "kind": "StorageV2",
+        "properties": {
+        },
+        "dependsOn": [
+            "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgname'))]"
+        ]
+    },
+    
+    {
+    "apiVersion": "2019-09-01",
+    "name": "NestedRGDeploymentForFlowLogs",
+    "type": "Microsoft.Resources/deployments",
+    "resourceGroup": "NetworkWatcherRG",
+    "dependsOn":[
+        "[variables('storageAccountName')]",
+        "[variables('nsgname')]"
+    ],
+    "properties": {
+        "mode": "Incremental",
+        "expressionEvaluationOptions": {
+            "scope": "inner"
+        },
+        "template": {
+            "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+            "contentVersion": "1.0.0.0",
+            "parameters": {
+                "location": {
+                    "type": "string"
+                },
+                "NetworkWatcherName": {
+                    "type": "string"
+                },
+                "FlowLogName": {
+                    "type": "string"
+                },
+                "existingNSG": {
+                    "type": "string"
+                },
+                "RetentionDays": {
+                    "type": "int"
+                },
+                "FlowLogsversion": {
+                    "type": "string"
+                },
+                "storageAccountResourceId": {
+                    "type": "string"
+                }
+            },
+            "resources": [
+                {
+                    "name": "[concat(parameters('NetworkWatcherName'), '/', parameters('FlowLogName'))]",
+                    "type": "Microsoft.Network/networkWatchers/FlowLogs",
+                    "location": "[parameters('location')]",
+                    "apiVersion": "2019-11-01",
+                    "properties": {
+                        "targetResourceId": "[parameters('existingNSG')]",
+                        "storageId": "[parameters('storageAccountResourceId')]",
+                        "enabled": true,
+                        "retentionPolicy": {
+                            "days": "[parameters('RetentionDays')]",
+                            "enabled": true
+                        },
+                        "format": {
+                            "type": "JSON",
+                            "version": "[parameters('FlowLogsversion')]"
+                        }
+                    }
+                }
+            ]
+        },
+        "parameters": {
+                "location": {
+                    "value": "[parameters('location')]"
+                },
+                "NetworkWatcherName": {
+                    "value": "[parameters('NetworkWatcherName')]"
+                },
+                "FlowLogName": {
+                    "value": "[parameters('FlowLogName')]"
+                },
+                "existingNSG": {
+                    "value": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('nsgName'))]"
+                },
+                "RetentionDays": {
+                    "value": "[parameters('RetentionDays')]"
+                },
+                "FlowLogsversion": {
+                    "value": "[parameters('FlowLogsversion')]"
+                },
+                "storageAccountResourceId": {
+                    "value": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+                }
+            }
+        }
+    }
+
+    
+
+  ],
+
+  "outputs": {
+
+    "VNET-ResourceID": {
+
+      "type": "string",
+
+      "value":"[resourceid('Microsoft.Network/virtualNetworks','vnet')]"
+
+    }
+
+  }
+
+}
